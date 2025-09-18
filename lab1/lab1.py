@@ -302,16 +302,16 @@ class ColorConverterApp(QMainWindow):
         self.color_display.set_color(r, g, b)
         self.hex_input.setText(f"#{r:02x}{g:02x}{b:02x}".upper())
         
-        # Обновляем RGB группу
+        # Обновляем все группы без вызова сигналов valuesChanged
+        self.updating = True
         self.rgb_group.set_values([r, g, b])
         
-        # Обновляем XYZ группу
         x, y, z = ColorConverter.rgb_to_xyz(r, g, b)
         self.xyz_group.set_values([x, y, z])
         
-        # Обновляем HLS группу
         h, l, s = ColorConverter.rgb_to_hls(r, g, b)
         self.hls_group.set_values([h, l, s])
+        self.updating = False
     
     def on_rgb_changed(self):
         if self.updating:
@@ -349,7 +349,18 @@ class ColorConverterApp(QMainWindow):
                 g = max(0, min(255, g))
                 b = max(0, min(255, b))
             
-            self.set_current_rgb(r, g, b)
+            # Обновляем только RGB и HLS, НЕ обновляем XYZ снова
+            self.current_rgb = (r, g, b)
+            self.color_display.set_color(r, g, b)
+            self.hex_input.setText(f"#{r:02x}{g:02x}{b:02x}".upper())
+            
+            # Обновляем RGB группу
+            self.rgb_group.set_values([r, g, b])
+            
+            # Обновляем HLS группу
+            h, l, s = ColorConverter.rgb_to_hls(r, g, b)
+            self.hls_group.set_values([h, l, s])
+            
         except Exception as e:
             self.show_warning(f"Ошибка преобразования XYZ: {str(e)}")
         finally:
@@ -372,7 +383,18 @@ class ColorConverterApp(QMainWindow):
                 g = max(0, min(255, g))
                 b = max(0, min(255, b))
             
-            self.set_current_rgb(r, g, b)
+            # Обновляем только RGB и XYZ, НЕ обновляем HLS снова
+            self.current_rgb = (r, g, b)
+            self.color_display.set_color(r, g, b)
+            self.hex_input.setText(f"#{r:02x}{g:02x}{b:02x}".upper())
+            
+            # Обновляем RGB группу
+            self.rgb_group.set_values([r, g, b])
+            
+            # Обновляем XYZ группу
+            x, y, z = ColorConverter.rgb_to_xyz(r, g, b)
+            self.xyz_group.set_values([x, y, z])
+            
         except Exception as e:
             self.show_warning(f"Ошибка преобразования HLS: {str(e)}")
         finally:
