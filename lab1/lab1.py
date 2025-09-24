@@ -10,17 +10,14 @@ from PyQt5.QtGui import QColor, QPalette, QFont
 class ColorConverter:
     @staticmethod
     def rgb_to_xyz(r, g, b):
-        # Нормализация RGB к диапазону [0, 1]
         r = r / 255.0
         g = g / 255.0
         b = b / 255.0
         
-        # Гамма-коррекция
         r = r if r <= 0.04045 else ((r + 0.055) / 1.055) ** 2.4
         g = g if g <= 0.04045 else ((g + 0.055) / 1.055) ** 2.4
         b = b if b <= 0.04045 else ((b + 0.055) / 1.055) ** 2.4
         
-        # Преобразование в XYZ
         x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375
         y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750
         z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
@@ -29,22 +26,18 @@ class ColorConverter:
     
     @staticmethod
     def xyz_to_rgb(x, y, z):
-        # Нормализация XYZ
         x = x / 100.0
         y = y / 100.0
         z = z / 100.0
         
-        # Преобразование в линейный RGB
         r = x * 3.2404542 + y * -1.5371385 + z * -0.4985314
         g = x * -0.9692660 + y * 1.8760108 + z * 0.0415560
         b = x * 0.0556434 + y * -0.2040259 + z * 1.0572252
         
-        # Гамма-коррекция
         r = 12.92 * r if r <= 0.0031308 else (1.055 * (r ** (1/2.4))) - 0.055
         g = 12.92 * g if g <= 0.0031308 else (1.055 * (g ** (1/2.4))) - 0.055
         b = 12.92 * b if b <= 0.0031308 else (1.055 * (b ** (1/2.4))) - 0.055
         
-        # Преобразование к диапазону [0, 255]
         r = max(0, min(255, int(round(r * 255))))
         g = max(0, min(255, int(round(g * 255))))
         b = max(0, min(255, int(round(b * 255))))
@@ -127,7 +120,6 @@ class ColorInputWidget(QWidget):
         self.layout = QHBoxLayout(self)
         self.label = QLabel(label)
         
-        # Для целых значений используем QSpinBox, для дробных - QDoubleSpinBox
         if decimals == 0:
             self.spinbox = QSpinBox()
         else:
@@ -168,7 +160,6 @@ class ColorInputWidget(QWidget):
     def _on_slider_changed(self, value):
         if not self._updating:
             self._updating = True
-            # Правильно устанавливаем значение в зависимости от типа спинбокса
             if self.decimals == 0:
                 self.spinbox.setValue(int(value))
             else:
@@ -236,14 +227,11 @@ class ColorConverterApp(QMainWindow):
         
         main_layout = QVBoxLayout(central_widget)
         
-        # Цветовой дисплей
         self.color_display = ColorDisplayWidget()
         main_layout.addWidget(self.color_display)
         
-        # Группы цветовых моделей
         models_layout = QHBoxLayout()
         
-        # RGB модель
         self.rgb_group = ColorModelGroup(
             "RGB",
             ["R:", "G:", "B:"],
@@ -253,7 +241,6 @@ class ColorConverterApp(QMainWindow):
         self.rgb_group.valuesChanged.connect(self.on_rgb_changed)
         models_layout.addWidget(self.rgb_group)
         
-        # XYZ модель
         self.xyz_group = ColorModelGroup(
             "XYZ",
             ["X:", "Y:", "Z:"],
@@ -263,7 +250,6 @@ class ColorConverterApp(QMainWindow):
         self.xyz_group.valuesChanged.connect(self.on_xyz_changed)
         models_layout.addWidget(self.xyz_group)
         
-        # HLS модель
         self.hls_group = ColorModelGroup(
             "HLS",
             ["H:", "L:", "S:"],
@@ -275,7 +261,6 @@ class ColorConverterApp(QMainWindow):
         
         main_layout.addLayout(models_layout)
         
-        # Кнопки управления
         buttons_layout = QHBoxLayout()
         
         self.palette_btn = QPushButton("Выбрать из палитры")
@@ -290,7 +275,6 @@ class ColorConverterApp(QMainWindow):
         
         main_layout.addLayout(buttons_layout)
         
-        # Предуреждающая метка
         self.warning_label = QLabel()
         self.warning_label.setStyleSheet("color: red; font-weight: bold;")
         self.warning_label.setVisible(False)
@@ -302,7 +286,6 @@ class ColorConverterApp(QMainWindow):
         self.color_display.set_color(r, g, b)
         self.hex_input.setText(f"#{r:02x}{g:02x}{b:02x}".upper())
         
-        # Обновляем все группы без вызова сигналов valuesChanged
         self.updating = True
         self.rgb_group.set_values([r, g, b])
         
@@ -321,7 +304,6 @@ class ColorConverterApp(QMainWindow):
         r, g, b = self.rgb_group.get_values()
         r, g, b = int(r), int(g), int(b)
         
-        # Проверка на выход за границы
         if r < 0 or r > 255 or g < 0 or g > 255 or b < 0 or b > 255:
             self.show_warning("RGB значения обрезаны до допустимого диапазона")
             r = max(0, min(255, r))
@@ -342,22 +324,18 @@ class ColorConverterApp(QMainWindow):
         try:
             r, g, b = ColorConverter.xyz_to_rgb(x, y, z)
             
-            # Проверка на выход за границы
             if r < 0 or r > 255 or g < 0 or g > 255 or b < 0 or b > 255:
                 self.show_warning("XYZ значения приводят к выходу за границы RGB")
                 r = max(0, min(255, r))
                 g = max(0, min(255, g))
                 b = max(0, min(255, b))
             
-            # Обновляем только RGB и HLS, НЕ обновляем XYZ снова
             self.current_rgb = (r, g, b)
             self.color_display.set_color(r, g, b)
             self.hex_input.setText(f"#{r:02x}{g:02x}{b:02x}".upper())
-            
-            # Обновляем RGB группу
+
             self.rgb_group.set_values([r, g, b])
             
-            # Обновляем HLS группу
             h, l, s = ColorConverter.rgb_to_hls(r, g, b)
             self.hls_group.set_values([h, l, s])
             
@@ -375,23 +353,19 @@ class ColorConverterApp(QMainWindow):
         
         try:
             r, g, b = ColorConverter.hls_to_rgb(h, l, s)
-            
-            # Проверка на выход за границы
+
             if r < 0 or r > 255 or g < 0 or g > 255 or b < 0 or b > 255:
                 self.show_warning("HLS значения приводят к выходу за границы RGB")
                 r = max(0, min(255, r))
                 g = max(0, min(255, g))
                 b = max(0, min(255, b))
             
-            # Обновляем только RGB и XYZ, НЕ обновляем HLS снова
             self.current_rgb = (r, g, b)
             self.color_display.set_color(r, g, b)
             self.hex_input.setText(f"#{r:02x}{g:02x}{b:02x}".upper())
             
-            # Обновляем RGB группу
             self.rgb_group.set_values([r, g, b])
             
-            # Обновляем XYZ группу
             x, y, z = ColorConverter.rgb_to_xyz(r, g, b)
             self.xyz_group.set_values([x, y, z])
             
@@ -426,7 +400,6 @@ class ColorConverterApp(QMainWindow):
         self.warning_label.setText(message)
         self.warning_label.setVisible(True)
         
-        # Автоматическое скрытие предупреждения через 3 секунды
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(3000, self.hide_warning)
     
@@ -436,7 +409,6 @@ class ColorConverterApp(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     
-    # Установка стиля для лучшего внешнего вида
     app.setStyle('Fusion')
     
     converter = ColorConverterApp()
