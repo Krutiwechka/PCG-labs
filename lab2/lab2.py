@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout,
                                QTableWidgetItem, QPushButton, QFileDialog, 
                                QLabel, QProgressBar, QLineEdit, QMessageBox,
                                QHeaderView, QTabWidget, QTextEdit, QSplitter,
-                               QGroupBox, QFrame)
+                               QGroupBox, QFrame, QRadioButton, QButtonGroup)
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QPalette, QColor, QIcon, QPainter
 import PIL.Image
@@ -35,9 +35,11 @@ class ImageInfoWorker(QThread):
     file_processed = Signal(str, ImageInfo)
     finished = Signal()
     
-    def __init__(self, folder_path):
+    def __init__(self, folder_path, single_file_mode=False, single_file_path=""):
         super().__init__()
         self.folder_path = folder_path
+        self.single_file_mode = single_file_mode
+        self.single_file_path = single_file_path
         self.image_files = []
         self.stop_requested = False
         
@@ -46,7 +48,13 @@ class ImageInfoWorker(QThread):
         return {'.jpg', '.jpeg', '.gif', '.tif', '.tiff', '.bmp', '.png', '.pcx'}
     
     def find_image_files(self):
-        """Находит все графические файлы в папке"""
+        """Находит все графические файлы в папке или возвращает один файл"""
+        if self.single_file_mode:
+            if os.path.exists(self.single_file_path):
+                return [self.single_file_path]
+            else:
+                return []
+                
         if not os.path.exists(self.folder_path):
             return []
             
@@ -186,29 +194,42 @@ class ImageInfoWorker(QThread):
             self.finished.emit()
             return
         
-        # Обработка файлов в потоках для ускорения
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = []
-            for i, filepath in enumerate(self.image_files):
-                if self.stop_requested:
-                    break
-                future = executor.submit(self.get_image_info, filepath)
-                futures.append((filepath, future))
-                
-            for i, (filepath, future) in enumerate(futures):
-                if self.stop_requested:
-                    break
-                try:
-                    info = future.result(timeout=10)
-                    self.file_processed.emit(filepath, info)
-                    progress = int((i + 1) / total_files * 100)
-                    self.progress.emit(progress)
-                except Exception as e:
-                    info = ImageInfo()
-                    info.filepath = filepath
-                    info.filename = os.path.basename(filepath)
-                    info.error = f"Ошибка обработки: {str(e)}"
-                    self.file_processed.emit(filepath, info)
+        # Для одного файла обрабатываем напрямую
+        if self.single_file_mode and total_files == 1:
+            try:
+                info = self.get_image_info(self.image_files[0])
+                self.file_processed.emit(self.image_files[0], info)
+                self.progress.emit(100)
+            except Exception as e:
+                info = ImageInfo()
+                info.filepath = self.image_files[0]
+                info.filename = os.path.basename(self.image_files[0])
+                info.error = f"Ошибка обработки: {str(e)}"
+                self.file_processed.emit(self.image_files[0], info)
+        else:
+            # Обработка файлов в потоках для ускорения
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = []
+                for i, filepath in enumerate(self.image_files):
+                    if self.stop_requested:
+                        break
+                    future = executor.submit(self.get_image_info, filepath)
+                    futures.append((filepath, future))
+                    
+                for i, (filepath, future) in enumerate(futures):
+                    if self.stop_requested:
+                        break
+                    try:
+                        info = future.result(timeout=10)
+                        self.file_processed.emit(filepath, info)
+                        progress = int((i + 1) / total_files * 100)
+                        self.progress.emit(progress)
+                    except Exception as e:
+                        info = ImageInfo()
+                        info.filepath = filepath
+                        info.filename = os.path.basename(filepath)
+                        info.error = f"Ошибка обработки: {str(e)}"
+                        self.file_processed.emit(filepath, info)
         
         self.finished.emit()
     
@@ -318,6 +339,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.worker = None
         self.image_info_dict = {}
+        self.scan_mode = "folder"  # "folder" или "file"
         self.init_ui()
         
     def init_ui(self):
@@ -409,6 +431,19 @@ class MainWindow(QMainWindow):
             QTextEdit {
                 color: #212529;
             }
+            QRadioButton {
+                color: #212529;
+                padding: 5px;
+            }
+            QRadioButton::indicator {
+                width: 15px;
+                height: 15px;
+            }
+            QRadioButton::indicator:checked {
+                background-color: #007bff;
+                border: 2px solid #0056b3;
+                border-radius: 7px;
+            }
         """)
         
         # Центральный виджет
@@ -434,22 +469,42 @@ class MainWindow(QMainWindow):
         """)
         layout.addWidget(title_label)
         
+        # Группа выбора режима
+        mode_group = QGroupBox("Режим сканирования")
+        mode_layout = QHBoxLayout(mode_group)
+        
+        self.folder_radio = QRadioButton("Сканировать папку")
+        self.file_radio = QRadioButton("Анализировать один файл")
+        self.folder_radio.setChecked(True)
+        
+        self.mode_button_group = QButtonGroup()
+        self.mode_button_group.addButton(self.folder_radio)
+        self.mode_button_group.addButton(self.file_radio)
+        self.mode_button_group.buttonClicked.connect(self.on_mode_changed)
+        
+        mode_layout.addWidget(self.folder_radio)
+        mode_layout.addWidget(self.file_radio)
+        mode_layout.addStretch()
+        
+        layout.addWidget(mode_group)
+        
         # Группа управления
         control_group = QGroupBox("Управление сканированием")
         control_layout = QVBoxLayout(control_group)
         
-        # Панель выбора папки
-        folder_layout = QHBoxLayout()
+        # Панель выбора папки/файла
+        path_layout = QHBoxLayout()
         
-        self.folder_path = QLineEdit()
-        self.folder_path.setPlaceholderText("Выберите папку с графическими файлами...")
+        self.path_label = QLabel("Папка:")
+        self.path_input = QLineEdit()
+        self.path_input.setPlaceholderText("Выберите папку с графическими файлами...")
         
         self.browse_btn = QPushButton("Обзор")
-        self.browse_btn.clicked.connect(self.browse_folder)
+        self.browse_btn.clicked.connect(self.browse_path)
         
-        folder_layout.addWidget(QLabel("Папка:"))
-        folder_layout.addWidget(self.folder_path, 1)
-        folder_layout.addWidget(self.browse_btn)
+        path_layout.addWidget(self.path_label)
+        path_layout.addWidget(self.path_input, 1)
+        path_layout.addWidget(self.browse_btn)
         
         # Панель кнопок
         buttons_layout = QHBoxLayout()
@@ -467,7 +522,7 @@ class MainWindow(QMainWindow):
         buttons_layout.addWidget(self.stop_btn)
         buttons_layout.addStretch()
         
-        control_layout.addLayout(folder_layout)
+        control_layout.addLayout(path_layout)
         control_layout.addLayout(buttons_layout)
         layout.addWidget(control_group)
         
@@ -528,25 +583,62 @@ class MainWindow(QMainWindow):
         self.status_bar = self.statusBar()
         self.status_bar.showMessage("Готов к работе")
         self.update_stats()
+    
+    def on_mode_changed(self):
+        """Обработка изменения режима сканирования"""
+        if self.folder_radio.isChecked():
+            self.scan_mode = "folder"
+            self.path_label.setText("Папка:")
+            self.path_input.setPlaceholderText("Выберите папку с графическими файлами...")
+            self.scan_btn.setText("Начать сканирование")
+        else:
+            self.scan_mode = "file"
+            self.path_label.setText("Файл:")
+            self.path_input.setPlaceholderText("Выберите графический файл...")
+            self.scan_btn.setText("Анализировать файл")
         
-    def browse_folder(self):
-        """Выбор папки с изображениями"""
-        folder = QFileDialog.getExistingDirectory(self, "Выберите папку с изображениями")
-        if folder:
-            self.folder_path.setText(folder)
-            self.scan_btn.setEnabled(True)
-            
-            # Подсчет файлов
-            supported_formats = {'.jpg', '.jpeg', '.gif', '.tif', '.tiff', '.bmp', '.png', '.pcx'}
-            image_count = sum(1 for f in Path(folder).rglob('*') 
-                            if f.suffix.lower() in supported_formats)
-            self.status_bar.showMessage(f"Найдено {image_count} поддерживаемых графических файлов")
+        # Сброс пути при смене режима
+        self.path_input.clear()
+        self.scan_btn.setEnabled(False)
+    
+    def browse_path(self):
+        """Выбор папки или файла"""
+        if self.scan_mode == "folder":
+            path = QFileDialog.getExistingDirectory(self, "Выберите папку с изображениями")
+            if path:
+                self.path_input.setText(path)
+                self.scan_btn.setEnabled(True)
+                
+                # Подсчет файлов
+                supported_formats = {'.jpg', '.jpeg', '.gif', '.tif', '.tiff', '.bmp', '.png', '.pcx'}
+                image_count = sum(1 for f in Path(path).rglob('*') 
+                                if f.suffix.lower() in supported_formats)
+                self.status_bar.showMessage(f"Найдено {image_count} поддерживаемых графических файлов")
+        else:
+            # Фильтр для графических файлов
+            file_filter = "Графические файлы (*.jpg *.jpeg *.png *.gif *.bmp *.tif *.tiff *.pcx);;Все файлы (*)"
+            file_path, _ = QFileDialog.getOpenFileName(self, "Выберите графический файл", "", file_filter)
+            if file_path:
+                self.path_input.setText(file_path)
+                self.scan_btn.setEnabled(True)
+                
+                # Проверка формата файла
+                file_ext = Path(file_path).suffix.lower()
+                supported_formats = {'.jpg', '.jpeg', '.gif', '.tif', '.tiff', '.bmp', '.png', '.pcx'}
+                if file_ext in supported_formats:
+                    self.status_bar.showMessage(f"Выбран файл: {os.path.basename(file_path)}")
+                else:
+                    self.status_bar.showMessage(f"Внимание: выбранный файл может не поддерживаться")
     
     def start_scanning(self):
         """Запуск сканирования изображений"""
-        folder = self.folder_path.text()
-        if not os.path.exists(folder):
-            QMessageBox.warning(self, "Ошибка", "Выбранная папка не существует!")
+        path = self.path_input.text()
+        if not path:
+            QMessageBox.warning(self, "Ошибка", "Путь не выбран!")
+            return
+        
+        if not os.path.exists(path):
+            QMessageBox.warning(self, "Ошибка", "Выбранный путь не существует!")
             return
         
         # Очистка предыдущих результатов
@@ -559,11 +651,20 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(True)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
-        self.progress_label.setText("Сканирование изображений...")
+        
+        if self.scan_mode == "folder":
+            self.progress_label.setText("Сканирование изображений...")
+        else:
+            self.progress_label.setText("Анализ файла...")
+            
         self.progress_label.setStyleSheet("font-weight: bold; color: #007bff;")
         
         # Запуск worker'а
-        self.worker = ImageInfoWorker(folder)
+        if self.scan_mode == "folder":
+            self.worker = ImageInfoWorker(path)
+        else:
+            self.worker = ImageInfoWorker("", single_file_mode=True, single_file_path=path)
+            
         self.worker.file_processed.connect(self.on_file_processed)
         self.worker.progress.connect(self.on_progress)
         self.worker.finished.connect(self.on_scan_finished)
@@ -584,13 +685,21 @@ class MainWindow(QMainWindow):
     def on_progress(self, value):
         """Обновление прогресса"""
         self.progress_bar.setValue(value)
-        self.progress_label.setText(f"Сканирование... {value}% завершено")
+        if self.scan_mode == "folder":
+            self.progress_label.setText(f"Сканирование... {value}% завершено")
+        else:
+            self.progress_label.setText(f"Анализ файла... {value}% завершено")
     
     def on_scan_finished(self):
         """Завершение сканирования"""
         self.scan_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
-        self.progress_label.setText(f"Сканирование завершено. Обработано {self.table_widget.rowCount()} файлов.")
+        
+        if self.scan_mode == "folder":
+            self.progress_label.setText(f"Сканирование завершено. Обработано {self.table_widget.rowCount()} файлов.")
+        else:
+            self.progress_label.setText("Анализ файла завершен.")
+            
         self.progress_label.setStyleSheet("font-weight: bold; color: #28a745;")
         
         # Обновление статистики
@@ -648,23 +757,36 @@ class MainWindow(QMainWindow):
         
         stats_text = "СТАТИСТИКА ОБРАБОТКИ\n"
         stats_text += "="*30 + "\n\n"
-        stats_text += f"Всего обработано файлов: {total_files}\n\n"
+        
+        if self.scan_mode == "folder":
+            stats_text += f"Всего обработано файлов: {total_files}\n\n"
+        else:
+            stats_text += "Режим: анализ одного файла\n\n"
         
         stats_text += "Распределение по форматам:\n"
         stats_text += "-"*25 + "\n"
         for format_name, count in sorted(format_count.items()):
-            percentage = (count / total_files) * 100
-            stats_text += f"  {format_name}: {count} файлов ({percentage:.1f}%)\n"
+            if self.scan_mode == "folder":
+                percentage = (count / total_files) * 100
+                stats_text += f"  {format_name}: {count} файлов ({percentage:.1f}%)\n"
+            else:
+                stats_text += f"  {format_name}: 1 файл\n"
         
         # Подсчет ошибок
         error_count = sum(1 for row in range(total_files) 
                          if self.table_widget.item(row, 7) and 
                          "✗" in self.table_widget.item(row, 7).text())
         
-        stats_text += f"\nФайлов с ошибками: {error_count}\n"
-        stats_text += f"Успешно обработано: {total_files - error_count}\n"
-        success_rate = ((total_files - error_count) / total_files * 100)
-        stats_text += f"Процент успеха: {success_rate:.1f}%\n"
+        if self.scan_mode == "folder":
+            stats_text += f"\nФайлов с ошибками: {error_count}\n"
+            stats_text += f"Успешно обработано: {total_files - error_count}\n"
+            success_rate = ((total_files - error_count) / total_files * 100)
+            stats_text += f"Процент успеха: {success_rate:.1f}%\n"
+        else:
+            if error_count == 0:
+                stats_text += f"\nСтатус: ✓ Успешно обработан\n"
+            else:
+                stats_text += f"\nСтатус: ✗ Ошибка обработки\n"
         
         # Информация о поддерживаемых форматах
         stats_text += "\nПОДДЕРЖИВАЕМЫЕ ФОРМАТЫ:\n"
@@ -677,7 +799,14 @@ class MainWindow(QMainWindow):
         stats_text += "• PCX - Формат Paintbrush\n"
         
         self.stats_text.setText(stats_text)
-        self.status_bar.showMessage(f"Обработано {total_files} файлов, {error_count} ошибок")
+        
+        if self.scan_mode == "folder":
+            self.status_bar.showMessage(f"Обработано {total_files} файлов, {error_count} ошибок")
+        else:
+            if error_count == 0:
+                self.status_bar.showMessage("Файл успешно проанализирован")
+            else:
+                self.status_bar.showMessage("Ошибка при анализе файла")
 
 def main():
     app = QApplication(sys.argv)
