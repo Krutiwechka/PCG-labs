@@ -16,7 +16,6 @@ from PIL.ExifTags import TAGS
 import PIL.ExifTags
 
 class ImageInfo:
-    """Класс для хранения информации об изображении"""
     def __init__(self):
         self.filename = ""
         self.filepath = ""
@@ -30,7 +29,6 @@ class ImageInfo:
         self.error = ""
 
 class ImageInfoWorker(QThread):
-    """Поток для обработки изображений"""
     progress = Signal(int)
     file_processed = Signal(str, ImageInfo)
     finished = Signal()
@@ -44,11 +42,9 @@ class ImageInfoWorker(QThread):
         self.stop_requested = False
         
     def get_supported_formats(self):
-        """Возвращает список поддерживаемых форматов"""
         return {'.jpg', '.jpeg', '.gif', '.tif', '.tiff', '.bmp', '.png', '.pcx'}
     
     def find_image_files(self):
-        """Находит все графические файлы в папке или возвращает один файл"""
         if self.single_file_mode:
             if os.path.exists(self.single_file_path):
                 return [self.single_file_path]
@@ -63,14 +59,13 @@ class ImageInfoWorker(QThread):
             for file in files:
                 if Path(file).suffix.lower() in self.get_supported_formats():
                     image_files.append(os.path.join(root, file))
-                if len(image_files) >= 100000:  # Ограничение по условию
+                if len(image_files) >= 100000:
                     break
             if len(image_files) >= 100000:
                 break
         return image_files
     
     def get_resolution_dpi(self, image):
-        """Получает разрешение в DPI"""
         try:
             dpi = image.info.get('dpi', (72, 72))
             if dpi and dpi[0] > 0:
@@ -80,7 +75,6 @@ class ImageInfoWorker(QThread):
         return "Н/Д"
     
     def get_compression_info(self, image, format):
-        """Получает информацию о сжатии"""
         try:
             if format.upper() in ['JPEG', 'JPG']:
                 return "JPEG сжатие"
@@ -107,12 +101,10 @@ class ImageInfoWorker(QThread):
         return "Н/Д"
     
     def get_color_depth(self, image):
-        """Получает глубину цвета"""
         try:
             if hasattr(image, 'bits'):
                 return f"{image.bits} бит"
             else:
-                # Расчет на основе режима изображения
                 mode_bits = {
                     '1': 1, 'L': 8, 'P': 8, 'RGB': 24, 'RGBA': 32,
                     'CMYK': 32, 'YCbCr': 24, 'LAB': 24, 'HSV': 24
@@ -123,11 +115,9 @@ class ImageInfoWorker(QThread):
             return "Н/Д"
     
     def get_extra_info(self, image, format):
-        """Получает дополнительную информацию о файле"""
         extra_info = []
         
         try:
-            # EXIF информация для JPEG и TIFF
             if format.upper() in ['JPEG', 'JPG', 'TIFF', 'TIF']:
                 exif_data = image._getexif()
                 if exif_data:
@@ -137,19 +127,16 @@ class ImageInfoWorker(QThread):
                         if tag not in ['JPEGThumbnail', 'TIFFThumbnail', 'Filename']:
                             extra_info.append(f"{tag}: {value}")
             
-            # Информация о палитре для GIF
             if format.upper() == 'GIF' and image.mode == 'P':
                 colors = image.getcolors()
                 if colors:
                     extra_info.append("=== ИНФОРМАЦИЯ О ПАЛИТРЕ ===")
                     extra_info.append(f"Количество цветов: {len(colors)}")
             
-            # Информация о количестве каналов
             extra_info.append("=== ОСНОВНАЯ ИНФОРМАЦИЯ ===")
             extra_info.append(f"Цветовой режим: {image.mode}")
             extra_info.append(f"Количество каналов: {len(image.getbands())}")
             
-            # Информация о прозрачности
             if hasattr(image, 'has_transparency') and image.has_transparency:
                 extra_info.append("Прозрачность: Да")
             
@@ -164,7 +151,6 @@ class ImageInfoWorker(QThread):
         return "\n".join(extra_info) if extra_info else "Дополнительная информация отсутствует"
     
     def get_image_info(self, filepath):
-        """Получает информацию об одном изображении"""
         info = ImageInfo()
         info.filepath = filepath
         info.filename = os.path.basename(filepath)
@@ -186,7 +172,6 @@ class ImageInfoWorker(QThread):
         return info
     
     def run(self):
-        """Основной метод выполнения"""
         self.image_files = self.find_image_files()
         total_files = len(self.image_files)
         
@@ -194,7 +179,6 @@ class ImageInfoWorker(QThread):
             self.finished.emit()
             return
         
-        # Для одного файла обрабатываем напрямую
         if self.single_file_mode and total_files == 1:
             try:
                 info = self.get_image_info(self.image_files[0])
@@ -207,7 +191,6 @@ class ImageInfoWorker(QThread):
                 info.error = f"Ошибка обработки: {str(e)}"
                 self.file_processed.emit(self.image_files[0], info)
         else:
-            # Обработка файлов в потоках для ускорения
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = []
                 for i, filepath in enumerate(self.image_files):
@@ -234,17 +217,14 @@ class ImageInfoWorker(QThread):
         self.finished.emit()
     
     def stop(self):
-        """Остановка обработки"""
         self.stop_requested = True
 
 class StyledTableWidget(QTableWidget):
-    """Стилизованная таблица для отображения информации"""
     def __init__(self):
         super().__init__()
         self.setup_table()
         
     def setup_table(self):
-        """Настройка стилизованной таблицы"""
         headers = [
             "Имя файла", "Размер (пикс.)", "Разрешение", "Глубина цвета", 
             "Сжатие", "Формат", "Режим", "Статус"
@@ -286,7 +266,6 @@ class StyledTableWidget(QTableWidget):
         self.setSortingEnabled(True)
         self.setShowGrid(True)
         
-        # Установка разумных размеров колонок
         self.setColumnWidth(0, 250)  # Имя файла
         self.setColumnWidth(1, 120)  # Размер
         self.setColumnWidth(2, 130)  # Разрешение
@@ -316,19 +295,17 @@ class StyledTableWidget(QTableWidget):
         
         for col, text in enumerate(items):
             item = QTableWidgetItem(text)
-            item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # Запрет редактирования
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             
-            # Цветовое кодирование статуса
             if info.error:
-                if col == 7:  # Столбец статуса
-                    item.setForeground(QColor(220, 53, 69))  # Красный для ошибок
-                    item.setBackground(QColor(255, 240, 240))  # Светло-красный фон
+                if col == 7:
+                    item.setForeground(QColor(220, 53, 69))
+                    item.setBackground(QColor(255, 240, 240))
             else:
-                if col == 7:  # Столбец статуса
-                    item.setForeground(QColor(40, 167, 69))  # Зеленый для успеха
-                    item.setBackground(QColor(240, 255, 240))  # Светло-зеленый фон
+                if col == 7:
+                    item.setForeground(QColor(40, 167, 69))
+                    item.setBackground(QColor(240, 255, 240))
             
-            # Выравнивание по центру для числовых колонок
             if col in [1, 2, 3, 5, 6]:
                 item.setTextAlignment(Qt.AlignCenter)
                 
@@ -343,11 +320,9 @@ class MainWindow(QMainWindow):
         self.init_ui()
         
     def init_ui(self):
-        """Инициализация пользовательского интерфейса"""
         self.setWindowTitle("Анализатор графических файлов - Лабораторная работа №2")
         self.setGeometry(100, 100, 1400, 800)
         
-        # Установка стиля приложения
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #f5f5f5;
@@ -446,14 +421,12 @@ class MainWindow(QMainWindow):
             }
         """)
         
-        # Центральный виджет
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
         layout.setSpacing(15)
         layout.setContentsMargins(15, 15, 15, 15)
         
-        # Заголовок
         title_label = QLabel("Анализатор графических файлов")
         title_label.setStyleSheet("""
             QLabel {
@@ -469,7 +442,6 @@ class MainWindow(QMainWindow):
         """)
         layout.addWidget(title_label)
         
-        # Группа выбора режима
         mode_group = QGroupBox("Режим сканирования")
         mode_layout = QHBoxLayout(mode_group)
         
@@ -488,11 +460,9 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(mode_group)
         
-        # Группа управления
         control_group = QGroupBox("Управление сканированием")
         control_layout = QVBoxLayout(control_group)
         
-        # Панель выбора папки/файла
         path_layout = QHBoxLayout()
         
         self.path_label = QLabel("Папка:")
@@ -506,7 +476,6 @@ class MainWindow(QMainWindow):
         path_layout.addWidget(self.path_input, 1)
         path_layout.addWidget(self.browse_btn)
         
-        # Панель кнопок
         buttons_layout = QHBoxLayout()
         
         self.scan_btn = QPushButton("Начать сканирование")
@@ -525,8 +494,7 @@ class MainWindow(QMainWindow):
         control_layout.addLayout(path_layout)
         control_layout.addLayout(buttons_layout)
         layout.addWidget(control_group)
-        
-        # Прогресс-бар
+
         self.progress_label = QLabel("Готов к работе")
         self.progress_label.setStyleSheet("font-weight: bold; color: #6c757d;")
         
@@ -535,15 +503,12 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(self.progress_label)
         layout.addWidget(self.progress_bar)
-        
-        # Создание вкладок
+
         self.tabs = QTabWidget()
         
-        # Таблица с основной информацией
         self.table_widget = StyledTableWidget()
         self.tabs.addTab(self.table_widget, "Основная информация")
         
-        # Панель с дополнительной информацией
         self.extra_info_text = QTextEdit()
         self.extra_info_text.setReadOnly(True)
         self.extra_info_text.setPlaceholderText("Выберите изображение для просмотра дополнительной информации...")
@@ -559,7 +524,6 @@ class MainWindow(QMainWindow):
         """)
         self.tabs.addTab(self.extra_info_text, "Детальная информация")
         
-        # Статистика
         self.stats_text = QTextEdit()
         self.stats_text.setReadOnly(True)
         self.stats_text.setStyleSheet("""
@@ -576,16 +540,13 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(self.tabs, 1)
         
-        # Подключение сигналов
         self.table_widget.itemSelectionChanged.connect(self.show_extra_info)
         
-        # Статус бар
         self.status_bar = self.statusBar()
         self.status_bar.showMessage("Готов к работе")
         self.update_stats()
     
     def on_mode_changed(self):
-        """Обработка изменения режима сканирования"""
         if self.folder_radio.isChecked():
             self.scan_mode = "folder"
             self.path_label.setText("Папка:")
@@ -597,32 +558,26 @@ class MainWindow(QMainWindow):
             self.path_input.setPlaceholderText("Выберите графический файл...")
             self.scan_btn.setText("Анализировать файл")
         
-        # Сброс пути при смене режима
         self.path_input.clear()
         self.scan_btn.setEnabled(False)
     
     def browse_path(self):
-        """Выбор папки или файла"""
         if self.scan_mode == "folder":
             path = QFileDialog.getExistingDirectory(self, "Выберите папку с изображениями")
             if path:
                 self.path_input.setText(path)
                 self.scan_btn.setEnabled(True)
                 
-                # Подсчет файлов
                 supported_formats = {'.jpg', '.jpeg', '.gif', '.tif', '.tiff', '.bmp', '.png', '.pcx'}
                 image_count = sum(1 for f in Path(path).rglob('*') 
                                 if f.suffix.lower() in supported_formats)
                 self.status_bar.showMessage(f"Найдено {image_count} поддерживаемых графических файлов")
         else:
-            # Фильтр для графических файлов
             file_filter = "Графические файлы (*.jpg *.jpeg *.png *.gif *.bmp *.tif *.tiff *.pcx);;Все файлы (*)"
             file_path, _ = QFileDialog.getOpenFileName(self, "Выберите графический файл", "", file_filter)
             if file_path:
                 self.path_input.setText(file_path)
                 self.scan_btn.setEnabled(True)
-                
-                # Проверка формата файла
                 file_ext = Path(file_path).suffix.lower()
                 supported_formats = {'.jpg', '.jpeg', '.gif', '.tif', '.tiff', '.bmp', '.png', '.pcx'}
                 if file_ext in supported_formats:
@@ -631,7 +586,6 @@ class MainWindow(QMainWindow):
                     self.status_bar.showMessage(f"Внимание: выбранный файл может не поддерживаться")
     
     def start_scanning(self):
-        """Запуск сканирования изображений"""
         path = self.path_input.text()
         if not path:
             QMessageBox.warning(self, "Ошибка", "Путь не выбран!")
@@ -641,12 +595,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка", "Выбранный путь не существует!")
             return
         
-        # Очистка предыдущих результатов
         self.table_widget.setRowCount(0)
         self.extra_info_text.clear()
         self.image_info_dict = {}
         
-        # Настройка интерфейса
         self.scan_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         self.progress_bar.setVisible(True)
@@ -658,8 +610,7 @@ class MainWindow(QMainWindow):
             self.progress_label.setText("Анализ файла...")
             
         self.progress_label.setStyleSheet("font-weight: bold; color: #007bff;")
-        
-        # Запуск worker'а
+
         if self.scan_mode == "folder":
             self.worker = ImageInfoWorker(path)
         else:
@@ -671,19 +622,16 @@ class MainWindow(QMainWindow):
         self.worker.start()
     
     def stop_scanning(self):
-        """Остановка сканирования"""
         if self.worker and self.worker.isRunning():
             self.worker.stop()
             self.worker.wait(5000)
         self.on_scan_finished()
     
     def on_file_processed(self, filepath, info):
-        """Обработка информации об обработанном файле"""
         self.image_info_dict[filepath] = info
         self.table_widget.add_image_info(info)
     
     def on_progress(self, value):
-        """Обновление прогресса"""
         self.progress_bar.setValue(value)
         if self.scan_mode == "folder":
             self.progress_label.setText(f"Сканирование... {value}% завершено")
@@ -691,7 +639,6 @@ class MainWindow(QMainWindow):
             self.progress_label.setText(f"Анализ файла... {value}% завершено")
     
     def on_scan_finished(self):
-        """Завершение сканирования"""
         self.scan_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         
@@ -702,11 +649,9 @@ class MainWindow(QMainWindow):
             
         self.progress_label.setStyleSheet("font-weight: bold; color: #28a745;")
         
-        # Обновление статистики
         self.update_stats()
     
     def show_extra_info(self):
-        """Показ дополнительной информации для выбранного изображения"""
         selected_items = self.table_widget.selectedItems()
         if not selected_items:
             return
@@ -718,7 +663,6 @@ class MainWindow(QMainWindow):
             
         filename = filename_item.text()
         
-        # Поиск соответствующей информации
         for filepath, info in self.image_info_dict.items():
             if info.filename == filename:
                 extra_text = f"ФАЙЛ: {info.filename}\n"
@@ -741,7 +685,6 @@ class MainWindow(QMainWindow):
                 break
     
     def update_stats(self):
-        """Обновление статистики"""
         total_files = self.table_widget.rowCount()
         if total_files == 0:
             self.stats_text.setText("Файлы еще не обработаны.")
@@ -772,7 +715,6 @@ class MainWindow(QMainWindow):
             else:
                 stats_text += f"  {format_name}: 1 файл\n"
         
-        # Подсчет ошибок
         error_count = sum(1 for row in range(total_files) 
                          if self.table_widget.item(row, 7) and 
                          "✗" in self.table_widget.item(row, 7).text())
@@ -788,7 +730,6 @@ class MainWindow(QMainWindow):
             else:
                 stats_text += f"\nСтатус: ✗ Ошибка обработки\n"
         
-        # Информация о поддерживаемых форматах
         stats_text += "\nПОДДЕРЖИВАЕМЫЕ ФОРМАТЫ:\n"
         stats_text += "-"*25 + "\n"
         stats_text += "• JPEG/JPG - Формат сжатия с потерями\n"
@@ -810,8 +751,7 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    
-    # Настройка шрифта
+
     font = QFont("Segoe UI", 10)
     app.setFont(font)
     
