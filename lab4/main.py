@@ -38,7 +38,7 @@ class CanvasWidget(QWidget):
         self.circle_radius = r
         self.update()
         
-    def dda_line(self, x1, y1, x2, y2):
+    def dda_line(self, x1, y1, x2, y2): #DDA линия
         points = []
         dx = x2 - x1
         dy = y2 - y1
@@ -61,7 +61,7 @@ class CanvasWidget(QWidget):
             
         return points
         
-    def bresenham_line(self, x1, y1, x2, y2):
+    def bresenham_line(self, x1, y1, x2, y2): #алгоритм брезенхема
         points = []
         dx = abs(x2 - x1)
         dy = abs(y2 - y1)
@@ -85,7 +85,7 @@ class CanvasWidget(QWidget):
                 
         return points
         
-    def step_by_step_line(self, x1, y1, x2, y2):
+    def step_by_step_line(self, x1, y1, x2, y2): #пошаговый алгоритм
         points = []
         if x1 == x2:
             y_start, y_end = min(y1, y2), max(y1, y2)
@@ -108,7 +108,7 @@ class CanvasWidget(QWidget):
                     
         return points
         
-    def bresenham_circle(self, cx, cy, r):
+    def bresenham_circle(self, cx, cy, r):  #окружность брезенхема
         points = []
         x = 0
         y = r
@@ -135,8 +135,7 @@ class CanvasWidget(QWidget):
             
         return points
 
-    def wu_line(self, x1, y1, x2, y2):
-        """Алгоритм Кастла-Питвея (Wu) для сглаживания линий"""
+    def wu_line(self, x1, y1, x2, y2): #Алгоритм Кастла-Питвея
         points_with_intensity = []
         
         def ipart(x):
