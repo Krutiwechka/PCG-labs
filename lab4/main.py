@@ -108,34 +108,30 @@ class CanvasWidget(QWidget):
                     
         return points
         
-    def bresenham_circle(self, cx, cy, r):  #окружность брезенхема
+    def bresenham_circle(self, cx, cy, r):#окружноссть брезенхема
         points = []
         x = 0
         y = r
         d = 3 - 2 * r
         
-        def add_circle_points(xc, yc, x, y):
+        while x <= y:
             points.extend([
-                (xc + x, yc + y), (xc - x, yc + y),
-                (xc + x, yc - y), (xc - x, yc - y),
-                (xc + y, yc + x), (xc - y, yc + x),
-                (xc + y, yc - x), (xc - y, yc - x)
+                (cx + x, cy + y), (cx - x, cy + y),
+                (cx + x, cy - y), (cx - x, cy - y),
+                (cx + y, cy + x), (cx - y, cy + x),
+                (cx + y, cy - x), (cx - y, cy - x)
             ])
-        
-        add_circle_points(cx, cy, x, y)
-        
-        while y >= x:
-            x += 1
-            if d > 0:
-                y -= 1
-                d = d + 4 * (x - y) + 10
-            else:
-                d = d + 4 * x + 6
-            add_circle_points(cx, cy, x, y)
             
+            if d < 0:
+                d = d + 4 * x + 6
+            else:
+                d = d + 4 * (x - y) + 10
+                y -= 1
+            
+            x += 1
+                
         return points
-
-    def wu_line(self, x1, y1, x2, y2): #Алгоритм Кастла-Питвея
+    def wu_line(self, x1, y1, x2, y2): #Алгоритм Wu-line
         points_with_intensity = []
         
         def ipart(x):
@@ -664,7 +660,7 @@ class MainWindow(QMainWindow):
                         
             elif algorithm == "Wu Line":
                 points_with_intensity = self.canvas.wu_line(x1, y1, x2, y2)
-                text += "Алгоритм Кастла-Питвея (Wu) - сглаживание:\n"
+                text += "Алгоритм Wu line - сглаживание:\n"
                 text += "   Использует антиалиасинг для сглаживания ступенек\n"
                 text += "   Каждый пиксель рисуется с интенсивностью от 0 до 1\n"
                 text += "   Интенсивность зависит от расстояния до идеальной линии\n"
